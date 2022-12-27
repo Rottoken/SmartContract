@@ -1,22 +1,6 @@
 /**
- *Submitted for verification at Etherscan.io on 2022-11-23
+ *Submitted for verification at BscScan.com on 2022-12-16
 */
-
-// ░██████╗░█████╗░███████╗██╗░░░██╗  ██████╗░██╗░░░██╗
-// ██╔════╝██╔══██╗██╔════╝██║░░░██║  ██╔══██╗╚██╗░██╔╝
-// ╚█████╗░███████║█████╗░░██║░░░██║  ██████╦╝░╚████╔╝░
-// ░╚═══██╗██╔══██║██╔══╝░░██║░░░██║  ██╔══██╗░░╚██╔╝░░
-// ██████╔╝██║░░██║██║░░░░░╚██████╔╝  ██████╦╝░░░██║░░░
-// ╚═════╝░╚═╝░░╚═╝╚═╝░░░░░░╚═════╝░  ╚═════╝░░░░╚═╝░░░
-
-// ░█████╗░░█████╗░██╗███╗░░██╗░██████╗██╗░░░██╗██╗░░░░░████████╗░░░███╗░░██╗███████╗████████╗
-// ██╔══██╗██╔══██╗██║████╗░██║██╔════╝██║░░░██║██║░░░░░╚══██╔══╝░░░████╗░██║██╔════╝╚══██╔══╝
-// ██║░░╚═╝██║░░██║██║██╔██╗██║╚█████╗░██║░░░██║██║░░░░░░░░██║░░░░░░██╔██╗██║█████╗░░░░░██║░░░
-// ██║░░██╗██║░░██║██║██║╚████║░╚═══██╗██║░░░██║██║░░░░░░░░██║░░░░░░██║╚████║██╔══╝░░░░░██║░░░
-// ╚█████╔╝╚█████╔╝██║██║░╚███║██████╔╝╚██████╔╝███████╗░░░██║░░░██╗██║░╚███║███████╗░░░██║░░░
-// ░╚════╝░░╚════╝░╚═╝╚═╝░░╚══╝╚═════╝░░╚═════╝░╚══════╝░░░╚═╝░░░╚═╝╚═╝░░╚══╝╚══════╝░░░╚═╝░░░
-
-// SAFU By Coinsult
 
 // SPDX-License-Identifier: MIT
 
@@ -896,23 +880,27 @@ contract DividendTracker is Ownable, DividendPayingToken {
     }
 }
 
-contract Rottoken is ERC20, Ownable {
-    uint256 public buyFee;
-    uint256 public sellFee;
+contract ROTTO is ERC20, Ownable {
+    uint256 public liquidityFeeOnBuy;
+    uint256 public treasuryFeeOnBuy;
+    uint256 public rewardsFeeOnBuy;
+    uint256 public buybackFeeOnBuy;
 
-    uint256 public liquidityShare;
-    uint256 public marketingShare;
-    uint256 public rewardShare;
-    uint256 public buybackShare;
+    uint256 private totalBuyFee;
 
-    address public marketingWallet;
+    uint256 public liquidityFeeOnSell;
+    uint256 public treasuryFeeOnSell;
+    uint256 public rewardsFeeOnSell;
+    uint256 public buybackFeeOnSell;
 
-    bool    public walletToWalletTransferWithoutFee;
+    uint256 private totalSellFee;
+
+    address public treasuryWallet;
 
     IUniswapV2Router02 public uniswapV2Router;
     address public  uniswapV2Pair;
     
-    address private DEAD = 0x000000000000000000000000000000000000dEaD;
+    address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     bool    private swapping;
     uint256 public swapTokensAtAmount;
@@ -922,24 +910,20 @@ contract Rottoken is ERC20, Ownable {
 
     DividendTracker public dividendTracker;
     address public immutable rewardToken;
-    address public immutable buybackToken;
     uint256 public gasForProcessing = 300_000;
 
     event ExcludeFromFees(address indexed account, bool isExcluded);
-    event ExcludedFromMaxTransactionLimit(address indexed account, bool isExcluded);
-    event ExcludedFromMaxWalletLimit(address indexed account, bool isExcluded);
-    event FeesUpdated(uint256 buyFee, uint256 sellFee);
-    event FeeSharesUpdated(uint256 liquidityShare, uint256 marketingShare, uint256 rewardShare, uint256 buybackShare);
-    event MarketingWalletChanged(address marketingWallet);
-    event MaxWalletLimitRateChanged(uint256 maxWalletLimitRate);
-    event MaxWalletLimitStateChanged(bool maxWalletLimit);
-    event MaxTransactionLimitRatesChanged(uint256 maxTransferRateBuy, uint256 maxTransferRateSell);
-    event MaxTransactionLimitStateChanged(bool maxTransactionLimit);
+    event TreasuryWalletChanged(address treasuryWallet);
     event SetAutomatedMarketMakerPair(address indexed pair, bool indexed value);
+
+    event SellFeesUpdated(uint256 totalSellFee);
+    event BuyFeesUpdated(uint256 totalBuyFee);
+    event TransferFeesUpdated(uint256 fee1, uint256 fee2);
+
     event SwapAndLiquify(uint256 tokensSwapped, uint256 bnbReceived, uint256 tokensIntoLiqudity);
     event SendMarketing(uint256 bnbSend);
-    event BuyBackAndBurned(uint256 amount);
     event UpdateUniswapV2Router(address indexed newAddress, address indexed oldAddress);
+    event UpdateDividendTracker(address indexed newAddress, address indexed oldAddress);
     event GasForProcessingUpdated(uint256 indexed newValue, uint256 indexed oldValue);
     event SendDividends(uint256 amount);
     event ProcessedDividendTracker(
@@ -951,26 +935,29 @@ contract Rottoken is ERC20, Ownable {
         address indexed processor
     );
 
-    constructor() payable ERC20("ROTTOKEN", "Rotto") {
-
-        buyFee  = 10;
-        sellFee = 10;
+    constructor() payable ERC20("Rottoken", "ROTTO") {
 
         rewardToken = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56; // BUSD
-        buybackToken = address(this); // OWN TOKEN
 
-        liquidityShare  = 10;
-        rewardShare     = 30;
-        marketingShare  = 30;
-        buybackShare    = 30;
+        liquidityFeeOnBuy   = 1;
+        treasuryFeeOnBuy    = 2;
+        rewardsFeeOnBuy     = 0;
+        buybackFeeOnBuy     = 2;
 
-        marketingWallet = 0xF4C0fdd225F73884BF7435260024e42f8D12060C;
+        totalBuyFee         = liquidityFeeOnBuy + treasuryFeeOnBuy + rewardsFeeOnBuy + buybackFeeOnBuy;
 
-        walletToWalletTransferWithoutFee = false;
+        liquidityFeeOnSell  = 1;
+        treasuryFeeOnSell   = 2;
+        rewardsFeeOnSell    = 2;
+        buybackFeeOnSell    = 2;
+
+        totalSellFee        = liquidityFeeOnSell + treasuryFeeOnSell + rewardsFeeOnSell + buybackFeeOnSell;
+
+        treasuryWallet = 0x629ddD118Df2EEEeF6Fe30e22f083c12D4cC355E;
 
         dividendTracker = new DividendTracker(5_000_000, rewardToken);
 
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E); // PCS Mainnet
         address _uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
             .createPair(address(this), _uniswapV2Router.WETH());
 
@@ -989,9 +976,10 @@ contract Rottoken is ERC20, Ownable {
         _isExcludedFromFees[owner()] = true;
         _isExcludedFromFees[DEAD] = true;
         _isExcludedFromFees[address(this)] = true;
+        _isExcludedFromFees[treasuryWallet] = true;
     
-        swapTokensAtAmount = 100_000_000_000 * (10 ** 9) / 5000;
         _mint(owner(), 100_000_000_000 * (10 ** 9));
+        swapTokensAtAmount = totalSupply() / 5000;
     }
 
     receive() external payable {
@@ -1042,35 +1030,38 @@ contract Rottoken is ERC20, Ownable {
         return _isExcludedFromFees[account];
     }
 
-    function updateFees(uint256 _buyFee, uint256 _sellFee) external onlyOwner {
-        require(_buyFee <= 15, "Buy fees cannot be more than 15%");
-        require(_sellFee <= 15, "Sell fees cannot be more than 15%");
+    function updateBuyFees(uint256 _liquidityFeeOnBuy, uint256 _treasuryFeeOnBuy, uint256 _rewardsFeeOnBuy, uint256 _buybackFeeOnBuy) external onlyOwner {
+        liquidityFeeOnBuy   = _liquidityFeeOnBuy;
+        treasuryFeeOnBuy    = _treasuryFeeOnBuy;
+        rewardsFeeOnBuy     = _rewardsFeeOnBuy;
+        buybackFeeOnBuy    = _buybackFeeOnBuy;
 
-        buyFee = _buyFee;
-        sellFee = _sellFee;
-        
-        emit FeesUpdated(buyFee, sellFee);
+        totalBuyFee = _liquidityFeeOnBuy + _treasuryFeeOnBuy + _rewardsFeeOnBuy + _buybackFeeOnBuy;
+
+        require(totalBuyFee <= 10, "Buy fee cannot be more than 10%");
+
+        emit BuyFeesUpdated(totalBuyFee);
     }
 
-    function updateFeeShares(uint256 _marketingFeeShare, uint256 _liquidityFeeShare, uint256 _rewardShare, uint256 _buybackShare) external onlyOwner {
-        require(_marketingFeeShare + _liquidityFeeShare + _rewardShare + _buybackShare == 100, "Total fee shares must be equal to 100");
-        marketingShare = _marketingFeeShare;
-        liquidityShare = _liquidityFeeShare;
-        rewardShare    = _rewardShare;
-        buybackShare  = _buybackShare;
-        emit FeeSharesUpdated(marketingShare, liquidityShare, rewardShare, buybackShare);
+    function updateSellFees(uint256 _liquidityFeeOnSell, uint256 _treasuryFeeOnSell, uint256 _rewardsFeeOnSell, uint256 _buybackFeeOnSell) external onlyOwner {
+        liquidityFeeOnSell   = _liquidityFeeOnSell;
+        treasuryFeeOnSell    = _treasuryFeeOnSell;
+        rewardsFeeOnSell     = _rewardsFeeOnSell;
+        buybackFeeOnSell    = _buybackFeeOnSell;
+
+        totalSellFee = _liquidityFeeOnSell + _treasuryFeeOnSell + _rewardsFeeOnSell + _buybackFeeOnSell;
+
+        require(totalSellFee <= 10, "Sell fee cannot be more than 10%");
+
+        emit SellFeesUpdated(totalSellFee);
     }
 
-    function enableWalletToWalletTransferWithoutFee(bool enable) external onlyOwner {
-        require(walletToWalletTransferWithoutFee != enable, "Wallet to wallet transfer without fee is already set to that value");
-        walletToWalletTransferWithoutFee = enable;
-    }
-
-    function changeMarketingWallet(address _marketingWallet) external onlyOwner {
-        require(_marketingWallet != marketingWallet, "Marketing wallet is already that address");
-        require(!isContract(_marketingWallet), "Marketing wallet cannot be a contract");
-        marketingWallet = _marketingWallet;
-        emit MarketingWalletChanged(marketingWallet);
+    function changeTreasuryWallet(address _treasuryWallet) external onlyOwner {
+        require(_treasuryWallet != treasuryWallet, "Marketing wallet is already that address");
+        require(!isContract(_treasuryWallet), "Marketing wallet cannot be a contract");
+        require(_treasuryWallet != DEAD, "Marketing wallet cannot be the zero address");
+        treasuryWallet = _treasuryWallet;
+        emit TreasuryWalletChanged(treasuryWallet);
     }
 
     function _transfer(
@@ -1093,20 +1084,20 @@ contract Rottoken is ERC20, Ownable {
         if( canSwap &&
             !swapping &&
             automatedMarketMakerPairs[to] &&
-            buyFee + sellFee > 0
+            totalBuyFee + totalSellFee > 0
         ) {
             swapping = true;
             
             uint256 liquidityTokens;
 
-            if(liquidityShare > 0) {
-                liquidityTokens = contractTokenBalance * liquidityShare / 100;
+            if(liquidityFeeOnBuy + liquidityFeeOnSell > 0) {
+                liquidityTokens = contractTokenBalance * (liquidityFeeOnBuy + liquidityFeeOnSell) / 100;
                 swapAndLiquify(liquidityTokens);
             }
 
             contractTokenBalance -= liquidityTokens;
 
-            uint256 bnbShare = marketingShare + rewardShare + buybackShare;
+            uint256 bnbShare = (treasuryFeeOnBuy + treasuryFeeOnSell) + (rewardsFeeOnBuy + rewardsFeeOnSell) + (buybackFeeOnBuy + buybackFeeOnSell);
             
             if(contractTokenBalance > 0 && bnbShare > 0) {
                 uint256 initialBalance = address(this).balance;
@@ -1124,19 +1115,19 @@ contract Rottoken is ERC20, Ownable {
                 
                 uint256 newBalance = address(this).balance - initialBalance;
 
-                if(marketingShare > 0) {
-                    uint256 marketingBNB = newBalance * marketingShare / bnbShare;
-                    sendBNB(payable(marketingWallet), marketingBNB);
-                    emit SendMarketing(marketingBNB);
+                if((treasuryFeeOnBuy + treasuryFeeOnSell) > 0) {
+                    uint256 treasuryBNB = newBalance * (treasuryFeeOnBuy + treasuryFeeOnSell) / bnbShare;
+                    sendBNB(payable(treasuryWallet), treasuryBNB);
+                    emit SendMarketing(treasuryBNB);
                 }
 
-                if(rewardShare > 0) {
-                    uint256 rewardBNB = newBalance * rewardShare / bnbShare;
+                if((rewardsFeeOnBuy + rewardsFeeOnSell) > 0) {
+                    uint256 rewardBNB = newBalance * (rewardsFeeOnBuy + rewardsFeeOnSell) / bnbShare;
                     swapAndSendDividends(rewardBNB);
                 }
 
-                if(buybackShare > 0) {
-                    uint256 buybackBNB = newBalance * buybackShare / bnbShare;
+                if((buybackFeeOnBuy + buybackFeeOnSell) > 0) {
+                    uint256 buybackBNB = newBalance * (buybackFeeOnBuy + buybackFeeOnSell) / bnbShare;
                     buyBackAndBurn(buybackBNB);
                 }
             }
@@ -1150,16 +1141,17 @@ contract Rottoken is ERC20, Ownable {
             takeFee = false;
         }
 
-        if(walletToWalletTransferWithoutFee && from != uniswapV2Pair && to != uniswapV2Pair) {
+        // w2w & not excluded from fees
+        if(from != uniswapV2Pair && to != uniswapV2Pair && takeFee) {
             takeFee = false;
         }
 
         if(takeFee) {
             uint256 _totalFees;
             if(from == uniswapV2Pair) {
-                _totalFees = buyFee;
+                _totalFees = totalBuyFee;
             } else {
-                _totalFees = sellFee;
+                _totalFees = totalSellFee;
             }
             uint256 fees = amount * _totalFees / 100;
             
@@ -1240,16 +1232,14 @@ contract Rottoken is ERC20, Ownable {
     function buyBackAndBurn(uint256 amount) private{
         address[] memory path = new address[](2);
         path[0] = uniswapV2Router.WETH();
-        path[1] = buybackToken;
+        path[1] = address(this);
 
         uniswapV2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(
             0,
             path,
-            DEAD,
+            address(DEAD),
             block.timestamp
         );
-        
-        emit BuyBackAndBurned(amount);
     }
 
     function setSwapTokensAtAmount(uint256 newAmount) external onlyOwner{
